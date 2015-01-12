@@ -37,7 +37,7 @@ data Header = Header {
 , os :: OS
 , abiVersion :: ()
 , kind :: Kind
-, isa :: ISA
+, isa :: Maybe ISA
 , entryPoint :: Address
 , programHeader :: Address
 , sectionHeader :: Address
@@ -101,6 +101,17 @@ instance FromBytes Int64 where
 slice :: ByteString -> Int -> Int -> [Word8]
 slice string bottom top = Data.List.map (index string) $ enumFromTo bottom top
 
+isas :: [(Word16,ISA)]
+isas = [(2,SPARC)
+       ,(3,X86)
+       ,(8,MIPS)
+       ,(20,PowerPC)
+       ,(40,ARM)
+       ,(42,SuperH)
+       ,(50,IA64)
+       ,(62,AMD64)
+       ,(183,AArch64)]
+
 interpretHeader :: RawHeader -> Header
 interpretHeader h = Header {..}
   where magic = slice h 0 3 == unpack "\127ELF"
@@ -127,17 +138,7 @@ interpretHeader h = Header {..}
           2 -> Executable
           3 -> Shared
           4 -> Core
-        isa = case fromRawBytes endian $ slice h 18 19 :: Word16 of
-          2 -> SPARC
-          3 -> X86
-          8 -> MIPS
-          20 -> PowerPC --0x14
-          40 -> ARM -- 0x28
-          42 -> SuperH -- 0x2A
-          50 -> IA64 -- 0x32
-          62 -> AMD64 -- 0x3E
-          183 -> AArch64 -- 0xB7
-          x -> error $ "Didn't recognize ISA code: " ++ show x
+        isa = (fromRawBytes endian $ slice h 18 19) `lookup` isas
         entryPoint = readValue 24 24
         programHeader = readValue 28 32
         sectionHeader = readValue 32 40
