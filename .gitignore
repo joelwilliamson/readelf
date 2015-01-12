@@ -9,3 +9,6 @@ cabal-dev
 .cabal-sandbox/
 cabal.sandbox.config
 cabal.config
+
+# This is a test file. It is binary
+ls
