@@ -34,9 +34,9 @@ data Header = Header {
 , wordSize :: WordSize
 , endian :: Endian
 -- Version omitted since it can only take a single value
-, os :: OS
+, os :: Maybe OS
 , abiVersion :: ()
-, kind :: Kind
+, kind :: Maybe Kind
 , isa :: Maybe ISA
 , entryPoint :: Address
 , programHeader :: Address
@@ -101,6 +101,23 @@ instance FromBytes Int64 where
 slice :: ByteString -> Int -> Int -> [Word8]
 slice string bottom top = Data.List.map (index string) $ enumFromTo bottom top
 
+oss :: [(Word8,OS)]
+oss = [(0,SysV)
+      ,(1,HPUX)
+      ,(2,NetBSD)
+      ,(3,Linux)
+      ,(6,Solaris)
+      ,(7,AIX)
+      ,(8,IRIX)
+      ,(9,FreeBSD)
+      ,(12,OpenBSD)]
+
+kinds :: [(Word16,Kind)]
+kinds = [(1,Relocatable)
+        ,(2,Executable)
+        ,(3,Shared)
+        ,(4,Core)]
+
 isas :: [(Word16,ISA)]
 isas = [(2,SPARC)
        ,(3,X86)
@@ -122,22 +139,9 @@ interpretHeader h = Header {..}
           1 -> Little
           2 -> Big
         -- Byte 6 reserved for ELF version
-        os = case index h 7 of
-          0 -> SysV
-          1 -> HPUX
-          2 -> NetBSD
-          3 -> Linux
-          6 -> Solaris
-          7 -> AIX
-          8 -> IRIX
-          9 -> FreeBSD
-          12 -> OpenBSD
+        os = index h 7 `lookup` oss
         abiVersion = ()
-        kind = case fromRawBytes endian $ slice h 16 17 :: Word16 of
-          1 -> Relocatable
-          2 -> Executable
-          3 -> Shared
-          4 -> Core
+        kind = (fromRawBytes endian $ slice h 16 17) `lookup` kinds
         isa = (fromRawBytes endian $ slice h 18 19) `lookup` isas
         entryPoint = readValue 24 24
         programHeader = readValue 28 32
