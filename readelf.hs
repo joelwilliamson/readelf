@@ -9,49 +9,6 @@ import Data.Bits
 
 import System.Environment(getArgs)
 
-type RawHeader = ByteString
-
-data WordSize = ThirtyTwo | SixtyFour
-              deriving (Show,Eq)
-                       
-data Endian = Big | Little
-            deriving (Show,Eq)
-                     
-data OS = SysV | HPUX | NetBSD | Linux | Solaris | AIX | IRIX | FreeBSD | OpenBSD | StandAlone
-        deriving (Show,Eq)
-                 
-data Kind = Relocatable | Executable | Shared | Core
-          deriving (Show,Eq)
-                   
-data ISA = SPARC | X86 | MIPS | PowerPC | ARM | SuperH | IA64 | AMD64 | AArch64
-         deriving (Show,Eq)
-                  
-data Address = Short Word32 | Long Word64
-             deriving (Show,Eq)
-                      
-type HeaderSize = Word16
-
-data Header = Header {
-  magic :: Bool -- Was the magic number found
-, wordSize :: WordSize
-, endian :: Endian
--- Version omitted since it can only take a single value
-, os :: Maybe OS
-, abiVersion :: ()
-, kind :: Maybe Kind
-, isa :: Maybe ISA
-, entryPoint :: Address
-, programHeader :: Address
-, sectionHeader :: Address
--- An implementation defined field
-, headerSize :: HeaderSize
-, programHeaderSize :: HeaderSize
-, programHeaderNum :: Word16
-, sectionHeaderSize :: HeaderSize
-, sectionHeaderNum :: Word16
-, sectionNamesIx :: Word16
-} deriving (Show,Eq)
-
 class FromBytes a where
   fromBytes :: [Word8] -> a -- Convert from bytes arrange least significant to most significant (little-endian)
   fromRawBytes :: Endian -> [Word8] -> a
@@ -99,6 +56,49 @@ instance FromBytes Word64 where
 
 instance FromBytes Int64 where
   fromBytes = (fromIntegral :: Word64 -> Int64) . fromBytes
+
+type RawHeader = ByteString
+
+data WordSize = ThirtyTwo | SixtyFour
+              deriving (Show,Eq)
+                       
+data Endian = Big | Little
+            deriving (Show,Eq)
+                     
+data OS = SysV | HPUX | NetBSD | Linux | Solaris | AIX | IRIX | FreeBSD | OpenBSD | StandAlone
+        deriving (Show,Eq)
+                 
+data Kind = Relocatable | Executable | Shared | Core
+          deriving (Show,Eq)
+                   
+data ISA = SPARC | X86 | MIPS | PowerPC | ARM | SuperH | IA64 | AMD64 | AArch64
+         deriving (Show,Eq)
+                  
+data Address = Short Word32 | Long Word64
+             deriving (Show,Eq)
+                      
+type HeaderSize = Word16
+
+data Header = Header {
+  magic :: Bool -- Was the magic number found
+, wordSize :: WordSize
+, endian :: Endian
+-- Version omitted since it can only take a single value
+, os :: Maybe OS
+, abiVersion :: ()
+, kind :: Maybe Kind
+, isa :: Maybe ISA
+, entryPoint :: Address
+, programHeader :: Address
+, sectionHeader :: Address
+-- An implementation defined field
+, headerSize :: HeaderSize
+, programHeaderSize :: HeaderSize
+, programHeaderNum :: Word16
+, sectionHeaderSize :: HeaderSize
+, sectionHeaderNum :: Word16
+, sectionNamesIx :: Word16
+} deriving (Show,Eq)
 
 slice :: ByteString -> Int -> Int -> [Word8]
 slice string bottom top = Data.List.map (index string) $ enumFromTo bottom top
