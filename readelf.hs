@@ -132,8 +132,8 @@ isas = [(2,SPARC)
        ,(62,AMD64)
        ,(183,AArch64)]
 
-interpretHeader :: RawHeader -> Header
-interpretHeader h = Header {..}
+interpretProgramHeader :: RawHeader -> Header
+interpretProgramHeader h = Header {..}
   where magic = slice h 0 3 == unpack "\x7fELF"
         wordSize = case index h 4 of
           1 -> ThirtyTwo
@@ -162,6 +162,68 @@ interpretHeader h = Header {..}
           ThirtyTwo -> fromRawBytes endian $ slice h s $ s + 1
           SixtyFour -> fromRawBytes endian $ slice h l $ succ l
 
+data SectionKind = Null | ProgramBits | SymbolTable | StringTable
+                 | Rela -- "Rela" relocation entries
+                 | SymbolHashTable | DynamicLinkTable | Notes
+                 | Empty | Rel -- "Rel" relocation entries
+                 | DynamicLoaderTable
+                 deriving (Show,Eq)
+                          
+sectionKinds :: [(Word32,SectionKind)]
+sectionKinds = [(0,Null)
+               ,(1,ProgramBits)
+               ,(2,SymbolTable)
+               ,(3,StringTable)
+               ,(4,Rela)
+               ,(5,SymbolHashTable)
+               ,(6,DynamicLinkTable)
+               ,(7,Notes)
+               ,(8,Empty)
+               ,(9,Rel)
+               ,(11,DynamicLoaderTable)]
+
+data SectionFlags = SectionFlags {
+  write :: Bool -- Section contains writable data
+, alloc :: Bool -- Section is allocated in memory image of program
+, exec :: Bool -- Section contains executable instructions
+} deriving (Show,Eq)
+
+sectionFlags :: Word64 -> SectionFlags
+sectionFlags x = SectionFlags {
+  write = testBit x 0,
+  alloc = testBit x 1,
+  exec = testBit x 2 }
+
+data SectionHeader = SectionHeader {
+  name :: Word32
+, sKind :: Maybe SectionKind
+, flags :: SectionFlags
+, virtualAddress :: Address
+, offset :: Address
+, size :: Word64
+, link :: Word32
+, info :: Word32
+, alignment :: Word64
+, entrySize :: Word64
+} deriving (Show,Eq)
+
+interpretSectionHeader64 h endian (Long start) = SectionHeader {..}
+  where name = 000
+        sKind = readValue 4 4 `lookup` sectionKinds
+        flags = sectionFlags $ readValue 8 8
+        virtualAddress = Long $ readValue 16 8
+        offset = Long $ readValue 24 8
+        size = readValue 32 8
+        link = readValue 40 4
+        info = readValue 44 4
+        alignment = readValue 48 8
+        entrySize = readValue 56 8
+        readValue offset size =
+          fromRawBytes endian
+          $ slice h (fromIntegral $ start + offset)
+          (fromIntegral $ start + offset + size - 1)
+
+          
 main = do
   args <- getArgs
   let file = case args of
@@ -169,5 +231,11 @@ main = do
         [file] -> file
         l -> error $ "Couldn't handle arguments: " ++ show l
   ls <- Data.ByteString.readFile file
-  print $ interpretHeader ls
+  let ph = interpretProgramHeader ls
+  print ph
+  let startAddress headerNum =
+        case sectionHeader ph of
+          Long addr -> Long $ fromIntegral addr + (fromIntegral headerNum) * (fromIntegral $ sectionHeaderSize ph)
+  mapM_ (\n -> print $ interpretSectionHeader64 ls (endian ph) $ startAddress n) [1..(sectionHeaderNum ph)]
+  -- Filter for the string table, parse that next for better info display
   
