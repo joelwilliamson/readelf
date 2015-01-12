@@ -7,6 +7,8 @@ import Data.Word
 import Data.List(reverse,map)
 import Data.Bits
 
+import System.Environment(getArgs)
+
 type RawHeader = ByteString
 
 data WordSize = ThirtyTwo | SixtyFour
@@ -15,7 +17,7 @@ data WordSize = ThirtyTwo | SixtyFour
 data Endian = Big | Little
             deriving (Show,Eq)
                      
-data OS = SysV | HPUX | NetBSD | Linux | Solaris | AIX | IRIX | FreeBSD | OpenBSD
+data OS = SysV | HPUX | NetBSD | Linux | Solaris | AIX | IRIX | FreeBSD | OpenBSD | StandAlone
         deriving (Show,Eq)
                  
 data Kind = Relocatable | Executable | Shared | Core
@@ -110,7 +112,8 @@ oss = [(0,SysV)
       ,(7,AIX)
       ,(8,IRIX)
       ,(9,FreeBSD)
-      ,(12,OpenBSD)]
+      ,(12,OpenBSD)
+      ,(255,StandAlone)]
 
 kinds :: [(Word16,Kind)]
 kinds = [(1,Relocatable)
@@ -131,7 +134,7 @@ isas = [(2,SPARC)
 
 interpretHeader :: RawHeader -> Header
 interpretHeader h = Header {..}
-  where magic = slice h 0 3 == unpack "\127ELF"
+  where magic = slice h 0 3 == unpack "\x7fELF"
         wordSize = case index h 4 of
           1 -> ThirtyTwo
           2 -> SixtyFour
@@ -160,6 +163,11 @@ interpretHeader h = Header {..}
           SixtyFour -> fromRawBytes endian $ slice h l $ succ l
 
 main = do
-  ls <- Data.ByteString.readFile "ls"
+  args <- getArgs
+  let file = case args of
+        [] -> "ls"
+        [file] -> file
+        l -> error $ "Couldn't handle arguments: " ++ show l
+  ls <- Data.ByteString.readFile file
   print $ interpretHeader ls
   
