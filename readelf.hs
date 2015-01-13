@@ -190,7 +190,12 @@ data SectionFlags = SectionFlags {
   write :: Bool -- Section contains writable data
 , alloc :: Bool -- Section is allocated in memory image of program
 , exec :: Bool -- Section contains executable instructions
-} deriving (Show,Eq)
+} deriving Eq
+
+instance Show SectionFlags where
+  show SectionFlags {..} = (if write then "W" else "")
+                           ++ (if alloc then "A" else "")
+                           ++ (if exec then "X" else "")
 
 sectionFlags :: Word64 -> SectionFlags
 sectionFlags x = SectionFlags {
