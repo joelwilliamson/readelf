@@ -76,7 +76,11 @@ data ISA = SPARC | X86 | MIPS | PowerPC | ARM | SuperH | IA64 | AMD64 | AArch64
                   
 data Address = Short Word32 | Long Word64
              deriving (Show,Eq)
-                      
+
+arrayIndex :: (Integral a, Integral b) => Address -> a -> b -> Address
+arrayIndex (Long addr) ix size = Long $ addr + (fromIntegral ix) * (fromIntegral size)
+arrayIndex (Short addr) ix size = Short $ addr + (fromIntegral ix) * (fromIntegral size)
+
 type HeaderSize = Word16
 
 data Header = Header {
