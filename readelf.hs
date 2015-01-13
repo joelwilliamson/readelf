@@ -3,6 +3,7 @@
 
 import qualified Data.ByteString as BS
 import Data.Int
+import Data.Maybe(fromMaybe)
 import Data.Word
 import Data.List(reverse,map)
 import Data.Bits
@@ -204,7 +205,7 @@ sectionFlags x = SectionFlags {
   exec = testBit x 2 }
 
 data SectionHeader = SectionHeader {
-  name :: Word32
+  name :: BS.ByteString
 , sKind :: Maybe SectionKind
 , flags :: SectionFlags
 , virtualAddress :: Address
@@ -216,8 +217,32 @@ data SectionHeader = SectionHeader {
 , entrySize :: Word64
 } deriving (Show,Eq)
 
-interpretSectionHeader64 h endian (Long start) = SectionHeader {..}
-  where name = 000
+type StringTable = [(Int,BS.ByteString)]
+
+readStringTable :: Integral a => BS.ByteString -> Address -> a -> StringTable
+readStringTable h (Long start') size = map (\ (f,s) -> (f,BS.pack s))
+                                       $ splitOn 0 0
+                                       $ slice h start (start + size - 1)
+  where start = fromIntegral start'
+
+-- The program header ph, has fields pointing to the start of the section header
+-- table, the size of a section header, and the index of the string table header.
+-- This gives us &strTbl = &secTbl + secSize*strTblIx.
+getStringTableFromRaw64 :: BS.ByteString -> Header -> [(Int,BS.ByteString)]
+getStringTableFromRaw64 h header=
+  readStringTable h (arrayIndex strTbl 0 tableSize) tableSize
+  where secTbl = sectionHeader header
+        strTblIx = sectionNamesIx header
+        secSize = fromIntegral $ sectionHeaderSize header
+        strTblHeader@(Long section) = arrayIndex secTbl strTblIx secSize
+        strTbl = Long $ fromRawBytes (endian header)
+                     $ slice h (section + 24) (section + 31)
+        tableSize = fromRawBytes (endian header)
+                    $ slice h (section + 32) (section + 39) :: Word64
+
+interpretSectionHeader64 :: BS.ByteString -> Endian -> Address -> StringTable -> SectionHeader
+interpretSectionHeader64 h endian (Long start) str = SectionHeader {..}
+  where name = fromMaybe "" $ (fromIntegral $ (readValue 0 4::Word32)) `lookup` str
         sKind = readValue 4 4 `lookup` sectionKinds
         flags = sectionFlags $ readValue 8 8
         virtualAddress = Long $ readValue 16 8
@@ -232,7 +257,25 @@ interpretSectionHeader64 h endian (Long start) = SectionHeader {..}
           $ slice h (fromIntegral $ start + offset)
           (fromIntegral $ start + offset + size - 1)
 
-          
+-- This is used to build an association list from a string.
+-- It prepends how far into the string each substring was found.
+-- It might be better to just leave the string unprocessed, index
+-- in on each call, and parse to find the end of that C-string.
+-- Currently, we do O(nm), where n is the number of strings, m is
+-- average length, preprocessing, then each lookup is O(n). Indexing
+-- would be no preprocessing (or maybe copy to seperate storage O(nm))
+-- then O(m) index/parse.
+splitOn :: Eq a => Int -> a -> [a] -> [(Int,[a])]
+splitOn i x [] = [(i,[])]
+splitOn i x [n]
+  | x == n = [(i,[])]
+  | otherwise = [(i,[n])]
+splitOn i x (hd:tl)
+  | x == hd = (i,[]):r
+  | otherwise = (i,hd:(snd $ head r)):(tail r)
+  where r = splitOn (succ i) x tl
+
+
 main = do
   args <- getArgs
   let file = case args of
@@ -242,9 +285,11 @@ main = do
   ls <- BS.readFile file
   let ph = interpretProgramHeader ls
   print ph
+  let stringTable = getStringTableFromRaw64 ls ph
+  print stringTable
   let startAddress headerNum =
         case sectionHeader ph of
           Long addr -> Long $ fromIntegral addr + (fromIntegral headerNum) * (fromIntegral $ sectionHeaderSize ph)
-  mapM_ (\n -> print $ interpretSectionHeader64 ls (endian ph) $ startAddress n) [1..(sectionHeaderNum ph)]
+  mapM_ (\n -> print $ interpretSectionHeader64 ls (endian ph) (startAddress n) stringTable) [0..pred $ sectionHeaderNum ph]
   -- Filter for the string table, parse that next for better info display
   
