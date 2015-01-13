@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Data.ByteString
+import qualified Data.ByteString as BS
 import Data.Int
 import Data.Word
 import Data.List(reverse,map)
@@ -57,7 +57,7 @@ instance FromBytes Word64 where
 instance FromBytes Int64 where
   fromBytes = (fromIntegral :: Word64 -> Int64) . fromBytes
 
-type RawHeader = ByteString
+type RawHeader = BS.ByteString
 
 data WordSize = ThirtyTwo | SixtyFour
               deriving (Show,Eq)
@@ -100,8 +100,8 @@ data Header = Header {
 , sectionNamesIx :: Word16
 } deriving (Show,Eq)
 
-slice :: ByteString -> Int -> Int -> [Word8]
-slice string bottom top = Data.List.map (index string) $ enumFromTo bottom top
+slice :: (Integral a, Enum a) => BS.ByteString -> a -> a -> [Word8]
+slice string bottom top = map (BS.index string . fromIntegral) $ enumFromTo bottom top
 
 oss :: [(Word8,OS)]
 oss = [(0,SysV)
@@ -134,15 +134,15 @@ isas = [(2,SPARC)
 
 interpretProgramHeader :: RawHeader -> Header
 interpretProgramHeader h = Header {..}
-  where magic = slice h 0 3 == unpack "\x7fELF"
-        wordSize = case index h 4 of
+  where magic = slice h 0 3 == BS.unpack "\x7fELF"
+        wordSize = case BS.index h 4 of
           1 -> ThirtyTwo
           2 -> SixtyFour
-        endian = case index h 5 of
+        endian = case BS.index h 5 of
           1 -> Little
           2 -> Big
         -- Byte 6 reserved for ELF version
-        os = index h 7 `lookup` oss
+        os = BS.index h 7 `lookup` oss
         abiVersion = ()
         kind = (fromRawBytes endian $ slice h 16 17) `lookup` kinds
         isa = (fromRawBytes endian $ slice h 18 19) `lookup` isas
@@ -230,7 +230,7 @@ main = do
         [] -> "ls"
         [file] -> file
         l -> error $ "Couldn't handle arguments: " ++ show l
-  ls <- Data.ByteString.readFile file
+  ls <- BS.readFile file
   let ph = interpretProgramHeader ls
   print ph
   let startAddress headerNum =
