@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 
+module Readelf where
+
 import qualified Data.ByteString as BS
 import Data.Int
 import Data.Maybe(fromMaybe)
