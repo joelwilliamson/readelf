@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 import qualified Data.ByteString as BS
 import Data.Int
@@ -8,7 +9,11 @@ import Data.Word
 import Data.List(reverse,map)
 import Data.Bits
 
+import qualified Text.PrettyPrint.Boxes as PP
 import System.Environment(getArgs)
+
+class PrettyPrint a where
+  prettyPrint :: a -> PP.Box
 
 class FromBytes a where
   fromBytes :: [Word8] -> a -- Convert from bytes arrange least significant to most significant (little-endian)
@@ -104,6 +109,24 @@ data Header = Header {
 , sectionHeaderNum :: Word16
 , sectionNamesIx :: Word16
 } deriving (Show,Eq)
+
+instance PrettyPrint Header where
+  prettyPrint Header {..} = (PP.<+>) labels values
+          where labels = PP.vcat PP.left
+                         $ map (PP.text . (++":"))
+                         ["ELF magic number","Word Size","Endianness","OS",
+                          "ABI Version", "Type","Instruction Set","Entry Point Address",
+                          "Program Header","Section Header","ELF Header size",
+                          "Program Header Size","# of Program Headers",
+                          "Section Header Size","# of Section Headers",
+                          "Section Names string table Index"]
+                values = PP.vcat PP.left
+                         $ map PP.text
+                         [show magic, show wordSize, show endian, show os, show abiVersion,
+                          show kind, show isa, show entryPoint, show programHeader,
+                          show sectionHeader, show headerSize, show programHeaderSize,
+                          show programHeaderNum, show sectionHeaderSize,
+                          show sectionHeaderNum, show sectionNamesIx]
 
 slice :: (Integral a, Enum a) => BS.ByteString -> a -> a -> [Word8]
 slice string bottom top = map (BS.index string . fromIntegral) $ enumFromTo bottom top
@@ -217,7 +240,32 @@ data SectionHeader = SectionHeader {
 , entrySize :: Word64
 } deriving (Show,Eq)
 
+instance PrettyPrint SectionHeader where
+  prettyPrint SectionHeader {..} = (PP.<+>) labels values
+    where labels = PP.vcat PP.left
+                   $ map (PP.text . (++":"))
+                   ["name","type","flags","Virtual Address",
+                    "offset","size","link","info","alignment",
+                    "entry size"]
+          values = PP.vcat PP.left
+                   $ map PP.text [show name,
+                                  maybe "" show sKind,
+                                  show flags,
+                                  show virtualAddress,
+                                  show offset,
+                                  show size,
+                                  show link,
+                                  show info,
+                                  show alignment,
+                                  show entrySize]
 type StringTable = [(Int,BS.ByteString)]
+
+instance PrettyPrint [(Int,BS.ByteString)] where
+  prettyPrint l = (PP.<+>) labels values
+    where labels = PP.vcat PP.left
+                   $ map (PP.text . show . fst) l
+          values = PP.vcat PP.left
+                   $ map (PP.text . show . snd) l
 
 readStringTable :: Integral a => BS.ByteString -> Address -> a -> StringTable
 readStringTable h (Long start') size = map (\ (f,s) -> (f,BS.pack s))
@@ -283,13 +331,16 @@ main = do
         [file] -> file
         l -> error $ "Couldn't handle arguments: " ++ show l
   ls <- BS.readFile file
-  let ph = interpretProgramHeader ls
-  print ph
-  let stringTable = getStringTableFromRaw64 ls ph
-  print stringTable
+  let elfHeader = interpretProgramHeader ls
+  let prettyElf = prettyPrint elfHeader
+  let stringTable = getStringTableFromRaw64 ls elfHeader
+  let prettyStringTable = prettyPrint stringTable
   let startAddress headerNum =
-        case sectionHeader ph of
-          Long addr -> Long $ fromIntegral addr + (fromIntegral headerNum) * (fromIntegral $ sectionHeaderSize ph)
-  mapM_ (\n -> print $ interpretSectionHeader64 ls (endian ph) (startAddress n) stringTable) [0..pred $ sectionHeaderNum ph]
-  -- Filter for the string table, parse that next for better info display
-  
+        case sectionHeader elfHeader of
+          Long addr -> Long $ fromIntegral addr + (fromIntegral headerNum) * (fromIntegral $ sectionHeaderSize elfHeader)
+  let prettySections = PP.vsep 1 PP.left $
+                       map (\n -> prettyPrint
+                                  $ interpretSectionHeader64 ls (endian elfHeader) (startAddress n) stringTable)
+                       [0..pred $ sectionHeaderNum elfHeader]
+  PP.printBox $ PP.vsep 3 PP.left [prettyElf,prettyStringTable,prettySections]
+  return (ls,elfHeader,stringTable)
