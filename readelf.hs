@@ -162,7 +162,7 @@ isas = [(2,SPARC)
 
 interpretProgramHeader :: RawHeader -> Header
 interpretProgramHeader h = Header {..}
-  where magic = slice h 0 3 == BS.unpack "\x7fELF"
+  where magic = slice h 0 3 == BS.unpack "\127ELF"
         wordSize = case BS.index h 4 of
           1 -> ThirtyTwo
           2 -> SixtyFour
